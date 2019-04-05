@@ -1,0 +1,260 @@
+---
+title: "Data624 Assignment7"
+author: "Ritesh Lohiya"
+date: "April 4, 2019"
+output: html_document
+---
+
+#Data624 Assignment 6
+
+
+```{r}
+suppressMessages(suppressWarnings(library(fpp2)))
+suppressMessages(suppressWarnings(library(readxl)))
+suppressMessages(suppressWarnings(library(seasonal)))
+suppressMessages(suppressWarnings(library(rdatamarket)))
+suppressMessages(suppressWarnings(library(tseries)))
+suppressMessages(suppressWarnings(library(AppliedPredictiveModeling)))
+suppressMessages(suppressWarnings(library(fma)))
+suppressMessages(suppressWarnings(library(corrplot)))
+suppressMessages(suppressWarnings(library(caret)))
+suppressMessages(suppressWarnings(library(pls)))
+suppressMessages(suppressWarnings(library(glmnet)))
+suppressMessages(suppressWarnings(library(missForest)))
+set.seed(3)
+```
+
+####6.2 Developing a model to predict permeability (see Sect. 1.4) could save significant resources for a pharmaceutical company, while at the same time more rapidly identifying molecules that have a sufficient permeability to become a drug:
+
+####(a) Start R and use these commands to load the data:
+
+```{r}
+data(permeability)
+#permeability
+summary(permeability)
+```
+
+####The matrix fingerprints contains the 1,107 binary molecular predic-tors for the 165 compounds, while permeability contains permeability response.
+
+####(b) The fingerprint predictors indicate the presence or absence of substructures of a molecule and are often sparse meaning that relatively few of the molecules contain each substructure. Filter out the predictors that have low frequencies using the nearZeroVar function from the caret package. How many predictors are left for modeling?
+
+```{r}
+nz <- nearZeroVar(fingerprints)
+length(nz)
+# Filter predictors
+fp <- fingerprints[, -nz]
+```
+
+####719 predictors can be dropped because they have near zero variance. So now there are 388 predictors.
+
+####(c) Split the data into a training and a test set, pre-process the data, and tune a PLS model. How many latent variables are optimal and what is the corresponding resampled estimate of R2?
+
+```{r}
+cp <- cor(fp)
+#cp
+```
+
+#### Lets remove the predictors with high correlation(.9)
+
+```{r}
+cp_high <- findCorrelation(cp, cutoff = .9)
+fp <- fp[, -cp]
+```
+
+#### Now lets do the train test split and build the model
+
+```{r}
+# train and test split
+
+fp_train <- fp[1:124, ]
+fp_test <- fp[1:124, ]
+
+permeability_train <- permeability[1:124, ]
+permeability_test <- permeability[1:124, ]
+```
+
+####PLS Model
+
+```{r}
+pls_model <- train(fp_train, permeability_train,
+                method = "pls",
+                tuneLength = 10,
+                trControl = trainControl(method = "cv"))
+
+
+# Plot PLS Model
+
+plot(pls_model, main="RMSE Error vs Components")
+pls_model$results[pls_model$results$ncomp == 8, 'Rsquared']
+pls_model$results[pls_model$results$ncomp == 8, 'RMSE']
+```
+
+```{r}
+pls_model
+```
+
+#### R^2 value is 0.4928981 and RMSE is 11.50874 with n = 8
+
+####(d) Predict the response for the test set. What is the test set estimate of R2?
+
+```{r}
+# Predict the permeability based on test set of fingerprints
+
+permeability_predict = predict(pls_model, fp_test)
+
+# Print out predictions and outcomes
+
+plot(permeability_predict, permeability_test, main="Observed vs Predicted Permeability from PLS Model (n=5)", xlab="Predicted Permeability", ylab="Observed Permeability")
+
+abline(0, 1, col='red')
+text(0, 30, paste("R^2 = ", round(cor(permeability_test, permeability_predict)^2, 2)))
+text(0, 27, paste("RMSE = ", round(sqrt(sum((permeability_test - permeability_predict)^2)), 2)))
+```
+
+#### The R^2 value is .79 which is really good.
+
+#### (e) Try building other models discussed in this chapter. Do any have better predictive performance?
+
+#### Lets use glmnet to build a new model.
+
+ 
+```{r}
+glm_model <- glmnet(fp_train, permeability_train, family="gaussian", alpha=0.5, lambda=0.001)
+permeability_glm_predict <- predict(glm_model, fp_test)
+
+plot(permeability_glm_predict, permeability_test, main="Observed vs Predicted Permeability from GLM Model", xlab="Predicted Permeability", ylab="Observed Permeability")
+
+abline(0, 1, col='red')
+text(0, 30, paste("R^2 = ", round(cor(permeability_test, permeability_glm_predict)^2, 2)))
+text(0, 27, paste("RMSE = ", round(sqrt(sum((permeability_test - permeability_glm_predict)^2)), 2)))
+```
+
+####(f) Would you recommend any of your models to replace the permeability laboratory experiment?
+
+#### I would recommend GLM Net model because it has a very high R^2.
+
+
+####6.3 . A chemical manufacturing process for a pharmaceutical product was discussed in Sect. 1.4. In this problem, the objective is to understand the relationship between biological measurements of the raw materials (predictors), 6.5 Computing 139 measurements of the manufacturing process (predictors), and the response of product yield. Biological predictors cannot be changed but can be used to assess the quality of the raw material before processing. On the other hand, manufacturing process predictors can be changed in the manufacturing process. Improving product yield by 1 % will boost revenue by approximately one hundred thousand dollars per batch:
+
+####(a)  Start R and use these commands to load the data:
+
+```{r}
+data(chemicalManufacturing)
+```
+
+#### Name of the data is ChemicalManufacturingProcess
+
+```{r}
+data(ChemicalManufacturingProcess)
+#ChemicalManufacturingProcess
+summary(ChemicalManufacturingProcess)
+```
+
+####(b) A small percentage of cells in the predictor set contain missing values. Use an imputation function to fill in these missing values (e.g., see Sect. 3.8).
+
+
+####We see some missing values from the summary and will impute them using missForest.
+
+```{r}
+cmfp = missForest(ChemicalManufacturingProcess)
+cmfp = cmfp$ximp
+```
+
+####Next we will separate out target variable yield from rest of the predictors 
+
+```{r}
+cmfp_data = cmfp[,2:58]
+target = cmfp[,1]
+```
+
+####(c) Split the data into a training and a test set, pre-process the data, and tune a model of your choice from this chapter. What is the optimal value of the performance metric?
+
+#### In this problem lets try 75/ 25 split.  
+
+```{r}
+train = createDataPartition(target, p=0.75 )
+predictor_train = cmfp_data[train$Resample1,]
+target_train = target[train$Resample]
+predictor_test = cmfp_data[-train$Resample1,]
+target_test = target[-train$Resample1]
+```
+
+####PLS model 
+
+```{r}
+pls_model <- train(predictor_train, target_train,
+                   method = "pls",
+                   tuneLength = 20,
+                   trControl = trainControl(method = "cv"),
+                   preProc = c("center", "scale"))
+
+# Plot PLS Model
+
+plot(pls_model, main="RMSE Error vs Components")
+pls_model$results[pls_model$results$ncomp == 1, 'Rsquared']
+pls_model$results[pls_model$results$ncomp == 1, 'RMSE']
+```
+
+```{r}
+pls_model
+```
+
+#### R^2 value is 0.4637491 and RMSE is 1.412183 with n = 1
+
+
+####(d) Predict the response for the test set. What is the value of the performance metric and how does this compare with the resampled performance metric on the training set?
+
+```{r}
+pred_test = predict(pls_model, predictor_test)
+#pred_train = predict(plsTune, predictor_training)
+pred_cmpf <- data.frame(obs = target_test, pred = pred_test)
+defaultSummary(pred_cmpf)
+```
+
+####R^2 = 0.3258719 and RMSE = 1.7951022, which is not better then the above metric.
+
+
+####(e) Which predictors are most important in the model you have trained? Do either the biological or process predictors dominate the list?
+
+```{r}
+plot(varImp(pls_model))
+v_imp <- varImp(pls_model)
+v_imp
+```
+
+####We can see that top predictors are manufacturing processes. So manufatucring processes have much higher impact on target.
+
+####(f)  Explore the relationships between each of the top predictors and the response. How could this information be helpful in improving yield in future runs of the manufacturing process?
+
+#### Lets consider the top 3 predictors and plot them against our target variable.
+
+####1. ManufacturingProcess32
+
+####2. ManufacturingProcess09
+
+####3. ManufacturingProcess36
+
+
+```{r}
+#ManufacturingProcess32
+plot(cmfp_data$ManufacturingProcess32, target)
+abline(lm(target~cmfp_data$ManufacturingProcess32),col="red",lwd=1.5)
+
+#ManufacturingProcess09
+plot(cmfp_data$ManufacturingProcess09, target)
+abline(lm(target~cmfp_data$ManufacturingProcess09),col="red",lwd=1.5)
+
+#ManufacturingProcess36
+plot(cmfp_data$ManufacturingProcess36, target)
+abline(lm(target~cmfp_data$ManufacturingProcess36),col="red",lwd=1.5)
+```
+
+####ManufacturingProcess32 and ManufacturingProcess09 has a positive corelation with the target and ManufacturingProcess36 have negative corelation with the target. This means we could adjust the variables to potentially increase the yield.
+
+
+
+
+
+
+
+
