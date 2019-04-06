@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/483588/cef6bbd7adb94bf5b6d1bdb63ec23345
+bundleId: https://api.rpubs.com/api/v1/document/483588/cef6bbd7adb94bf5b6d1bdb63ec23345
+url: http://rpubs.com/ritesh_lohiya/483588
+when: 1554594440.69707
